@@ -96,6 +96,10 @@ def recommend(state: RecommenderState) -> dict:
             "recommend exactly ONE specific title they haven't seen yet. "
             "Explain in 2-3 sentences why it matches their current mood, "
             "referencing specific things from their past reviews when relevant."
+            "Respect a specific structure for your response: "
+            "A h2 markdown header for the title (e.g. ## Prison Break)"
+            "A new line and then a paragraph with the 2-3 sentences."
+            "Skip any intros and outros"
         )
     )
 

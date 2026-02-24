@@ -4,12 +4,12 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-background text-foreground">
       <header className="flex justify-end p-4">
         <ThemeToggle />
       </header>
 
-      <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-8 px-4">
+      <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4">
         <div className="text-center">
           <h1 className="text-4xl font-bold tracking-tight">Pop's Choice 🍿</h1>
           <p className="mt-2 text-muted-foreground">

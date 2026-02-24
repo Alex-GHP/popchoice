@@ -3,6 +3,7 @@
 import { ArrowLeft, Send } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,7 +144,9 @@ export default function RecommendPage() {
                 <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Recommendation
                 </p>
-                <p className="text-sm leading-relaxed">{recommendation}</p>
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown>{recommendation}</ReactMarkdown>
+                </div>
               </div>
             )}
           </div>
