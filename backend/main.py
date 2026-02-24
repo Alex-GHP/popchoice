@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from fastapi import FastAPI
@@ -59,9 +60,11 @@ class SearchResult(BaseModel):
 
 app = FastAPI()
 
+_cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
