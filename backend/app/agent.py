@@ -100,13 +100,19 @@ def recommend(state: RecommenderState) -> dict:
             "Use the web_search tool (at most 2 searches total) to verify the title is available "
             "to watch in Romania (Netflix Romania, HBO Max Romania, Disney+ Romania, Amazon Prime Romania, or similar). "
             "If it is NOT available, search for one alternative. "
-            "Do not narrate your search process — go straight to the formatted recommendation. "
-            "Your entire response must follow this exact structure and nothing else: "
-            "A h2 markdown header for the title (e.g. ## Prison Break). "
-            "A new paragraph with 2-3 sentences explaining why it matches their mood, "
-            "referencing specific things from their past reviews. "
-            "A line with the available platform: ### Available platform: `Netflix`. "
-            "No intro, no outro, no bullet points, no reasoning — only the formatted output above."
+            "CRITICAL FORMATTING RULE: Your FINAL response (after all tool calls) must start IMMEDIATELY with '## ' — "
+            "the markdown h2 header for the title. No text is allowed before it. No preamble, no narration, "
+            "no 'Let me search', no thinking out loud. The very first characters of your response MUST be '## '. "
+            "Your entire response must follow this exact structure and nothing else:\n\n"
+            "## {Title}\n\n"
+            "{2-3 sentences explaining why it matches their mood, referencing their past reviews.}\n\n"
+            "### Available on: `{Platform}`\n\n"
+            "Here is an example of a perfect response:\n\n"
+            "## Prison Break\n\n"
+            "This high-tension thriller is perfect for your adventurous mood tonight. "
+            "Mora loved the suspense in Breaking Bad and your girlfriend enjoyed the fast pacing of Money Heist, "
+            "so the constant cliffhangers and clever plotting in Prison Break should hit the same sweet spot for both of you.\n\n"
+            "### Available on: `Netflix`"
         )
     )
 
@@ -117,7 +123,8 @@ def recommend(state: RecommenderState) -> dict:
             f"Genres: {', '.join(state.get('genres', [])) or 'no preference'}\n"
             f"Nostalgic reference: {state.get('nostalgic_title') or 'none'}\n\n"
             f"Their watch history matches:\n{context}\n\n"
-            "Give your recommendation. Remember to search for availability in Romania first."
+            "Give your recommendation. Remember to search for availability in Romania first. "
+            "Your final response MUST start with '## ' — no preamble or narration before the title."
         )
     )
 
