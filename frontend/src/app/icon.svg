@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Popcorn puffs -->
+  <circle cx="10" cy="11" r="5.5" fill="#FFE066"/>
+  <circle cx="22" cy="11" r="5.5" fill="#FFD700"/>
+  <circle cx="16" cy="8"  r="5.5" fill="#FFF3B0"/>
+  <circle cx="6"  cy="16" r="4"   fill="#FFE066"/>
+  <circle cx="26" cy="16" r="4"   fill="#FFD700"/>
+  <!-- Bucket body -->
+  <path d="M5 18 L8 30 L24 30 L27 18 Z" fill="#E53935"/>
+  <!-- Bucket stripes -->
+  <path d="M12.5 18 L14 30 L16 30 L14.5 18 Z" fill="white" opacity="0.55"/>
+  <path d="M17.5 18 L19 30 L21 30 L19.5 18 Z" fill="white" opacity="0.55"/>
+  <!-- Bucket rim -->
+  <rect x="4" y="16.5" width="24" height="3" rx="1.5" fill="#C62828"/>
+</svg>

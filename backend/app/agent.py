@@ -10,7 +10,7 @@ from app.database import search_similar
 
 
 class RecommenderState(TypedDict):
-    mood: str | None
+    mood: list[str]
     media_type: str | None
     genres: list[str]
     nostalgic_title: str | None
@@ -23,8 +23,12 @@ _llm = ChatAnthropic(model="claude-haiku-4-5-20251001")  # type: ignore[call-arg
 
 
 def ask_mood(state: RecommenderState) -> dict:
-    mood = interrupt("What mood are you two in tonight?")
-    return {"mood": mood}
+    answer = interrupt(
+        "What mood are you two in tonight? "
+        "(You can give multiple moods separated by commas, e.g. 'relaxed, adventurous')"
+    )
+    moods = [m.strip() for m in answer.replace(" and ", ",").split(",") if m.strip()]
+    return {"mood": moods}
 
 
 def ask_type(state: RecommenderState) -> dict:
@@ -48,7 +52,7 @@ def ask_genres(state: RecommenderState) -> dict:
 def search_db(state: RecommenderState) -> dict:
     parts = []
     if state.get("mood"):
-        parts.append(f"mood: {state['mood']}")
+        parts.append(f"mood: {', '.join(state['mood'])}")
     if state.get("media_type"):
         parts.append(f"type: {state['media_type']}")
     if state.get("genres"):
@@ -97,7 +101,7 @@ def recommend(state: RecommenderState) -> dict:
 
     human = HumanMessage(
         content=(
-            f"Current mood: {state.get('mood')}\n"
+            f"Current mood: {', '.join(state.get('mood', [])) or 'not specified'}\n"
             f"Wants: {state.get('media_type')}\n"
             f"Genres: {', '.join(state.get('genres', [])) or 'no preference'}\n"
             f"Nostalgic reference: {state.get('nostalgic_title') or 'none'}\n\n"

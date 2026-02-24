@@ -15,7 +15,7 @@ def make_state(**overrides) -> RecommenderState:
     This pattern avoids repeating the full dict in every test.
     """
     base: RecommenderState = {
-        "mood": None,
+        "mood": [],
         "media_type": None,
         "genres": [],
         "nostalgic_title": None,
@@ -83,10 +83,11 @@ def test_recommend_includes_mood_in_prompt():
 
     with patch("app.agent._llm") as mock_llm:
         mock_llm.invoke.return_value = mock_response
-        recommend(make_state(mood="relaxed and cozy"))
+        recommend(make_state(mood=["relaxed", "cozy"]))
 
     human_content = mock_llm.invoke.call_args[0][0][1].content
-    assert "relaxed and cozy" in human_content
+    assert "relaxed" in human_content
+    assert "cozy" in human_content
 
 
 def test_recommend_includes_search_results_in_prompt():

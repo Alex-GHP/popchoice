@@ -7,10 +7,11 @@ from pydantic import BaseModel
 
 from app.agent import recommender
 from app.database import add_media
+from app.tmdb import search_media as tmdb_search
 
 
 INITIAL_STATE = {
-    "mood": None,
+    "mood": [],
     "media_type": None,
     "genres": [],
     "nostalgic_title": None,
@@ -47,6 +48,15 @@ class ReplyResponse(BaseModel):
     recommendation: str | None = None
 
 
+class SearchResult(BaseModel):
+    tmdb_id: int
+    title: str
+    type: str
+    year: str
+    description: str
+    genres: list[str]
+
+
 app = FastAPI()
 
 app.add_middleware(
@@ -55,6 +65,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/search")
+def search(q: str) -> list[SearchResult]:
+    return tmdb_search(q)
 
 
 @app.post("/media")
