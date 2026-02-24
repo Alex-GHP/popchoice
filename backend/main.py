@@ -1,12 +1,14 @@
 import os
 import uuid
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
 from pydantic import BaseModel
 
 from app.agent import recommender
+from app.config import API_SECRET
 from app.database import add_media
 from app.tmdb import search_media as tmdb_search
 
@@ -58,7 +60,17 @@ class SearchResult(BaseModel):
     genres: list[str]
 
 
-app = FastAPI()
+_bearer = HTTPBearer()
+
+
+def _verify_token(
+    credentials: HTTPAuthorizationCredentials = Security(_bearer),
+) -> None:
+    if credentials.credentials != API_SECRET:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+app = FastAPI(dependencies=[Depends(_verify_token)])
 
 _cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:3000").split(",")
 

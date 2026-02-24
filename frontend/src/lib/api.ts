@@ -1,5 +1,3 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 export interface MediaPayload {
   title: string;
   type: string;
@@ -32,7 +30,7 @@ export interface SearchResult {
 }
 
 export async function searchMedia(query: string): Promise<SearchResult[]> {
-  const res = await fetch(`${BASE}/search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) throw new Error("Failed to search media");
   return res.json() as Promise<SearchResult[]>;
 }
@@ -40,7 +38,7 @@ export async function searchMedia(query: string): Promise<SearchResult[]> {
 export async function saveMedia(
   data: MediaPayload,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${BASE}/media`, {
+  const res = await fetch("/api/media", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -50,7 +48,7 @@ export async function saveMedia(
 }
 
 export async function startRecommendation(): Promise<StartResponse> {
-  const res = await fetch(`${BASE}/recommend/start`, { method: "POST" });
+  const res = await fetch("/api/recommend/start", { method: "POST" });
   if (!res.ok) throw new Error("Failed to start recommendation");
   return res.json() as Promise<StartResponse>;
 }
@@ -59,7 +57,7 @@ export async function sendReply(
   thread_id: string,
   answer: string,
 ): Promise<ReplyResponse> {
-  const res = await fetch(`${BASE}/recommend/reply`, {
+  const res = await fetch("/api/recommend/reply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ thread_id, answer }),
