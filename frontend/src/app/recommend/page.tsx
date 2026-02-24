@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sendReply, startRecommendation } from "@/lib/api";
 
+function extractRecommendation(text: string): string {
+  if (text.startsWith("## ")) return text;
+  const idx = text.indexOf("\n## ");
+  if (idx >= 0) return text.slice(idx + 1);
+  return "";
+}
+
 interface Message {
   id: number;
   role: "agent" | "user";
@@ -66,11 +73,15 @@ export default function RecommendPage() {
           setLoading(false);
         } else if (event.type === "chunk") {
           streamingRef.current += event.content;
-          setStreamingText(streamingRef.current);
-          setLoading(false);
+          const extracted = extractRecommendation(streamingRef.current);
+          if (extracted) {
+            setStreamingText(extracted);
+            setLoading(false);
+          }
         } else if (event.type === "done") {
+          const extracted = extractRecommendation(streamingRef.current);
           setDone(true);
-          setRecommendation(streamingRef.current);
+          setRecommendation(extracted || streamingRef.current);
           setStreamingText("");
           streamingRef.current = "";
         }
@@ -159,7 +170,15 @@ export default function RecommendPage() {
                   Recommendation
                 </p>
                 <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      code: ({ children }) => (
+                        <code className="not-prose rounded bg-muted px-1 py-0.5 font-mono text-sm">
+                          {children}
+                        </code>
+                      ),
+                    }}
+                  >
                     {streamingText || recommendation || ""}
                   </ReactMarkdown>
                 </div>

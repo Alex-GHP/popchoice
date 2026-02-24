@@ -69,8 +69,9 @@ def test_routes_to_recommend_when_already_asked_nostalgic_with_one_result():
 def test_recommend_returns_llm_content():
     mock_response = MagicMock()
     mock_response.content = "Watch Hereditary."
+    mock_response.tool_calls = []  # no tool calls → loop exits immediately
 
-    with patch("app.agent._llm") as mock_llm:
+    with patch("app.agent._llm_with_tools") as mock_llm:
         mock_llm.invoke.return_value = mock_response
         result = recommend(make_state())
 
@@ -80,8 +81,9 @@ def test_recommend_returns_llm_content():
 def test_recommend_includes_mood_in_prompt():
     mock_response = MagicMock()
     mock_response.content = "Some recommendation."
+    mock_response.tool_calls = []
 
-    with patch("app.agent._llm") as mock_llm:
+    with patch("app.agent._llm_with_tools") as mock_llm:
         mock_llm.invoke.return_value = mock_response
         recommend(make_state(mood=["relaxed", "cozy"]))
 
@@ -93,6 +95,7 @@ def test_recommend_includes_mood_in_prompt():
 def test_recommend_includes_search_results_in_prompt():
     mock_response = MagicMock()
     mock_response.content = "Some recommendation."
+    mock_response.tool_calls = []
 
     results = [
         {
@@ -104,7 +107,7 @@ def test_recommend_includes_search_results_in_prompt():
         }
     ]
 
-    with patch("app.agent._llm") as mock_llm:
+    with patch("app.agent._llm_with_tools") as mock_llm:
         mock_llm.invoke.return_value = mock_response
         recommend(make_state(search_results=results))
 
@@ -117,8 +120,9 @@ def test_recommend_includes_search_results_in_prompt():
 def test_recommend_uses_no_matches_message_when_results_empty():
     mock_response = MagicMock()
     mock_response.content = "Some recommendation."
+    mock_response.tool_calls = []
 
-    with patch("app.agent._llm") as mock_llm:
+    with patch("app.agent._llm_with_tools") as mock_llm:
         mock_llm.invoke.return_value = mock_response
         recommend(make_state(search_results=[]))
 
@@ -129,8 +133,9 @@ def test_recommend_uses_no_matches_message_when_results_empty():
 def test_recommend_includes_nostalgic_title_in_prompt():
     mock_response = MagicMock()
     mock_response.content = "Some recommendation."
+    mock_response.tool_calls = []
 
-    with patch("app.agent._llm") as mock_llm:
+    with patch("app.agent._llm_with_tools") as mock_llm:
         mock_llm.invoke.return_value = mock_response
         recommend(make_state(nostalgic_title="The Matrix"))
 

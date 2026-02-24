@@ -115,13 +115,23 @@ def recommend_reply(body: ReplyRequest) -> StreamingResponse:
             config,
             stream_mode="messages",
         ):
-            if (
-                metadata.get("langgraph_node") == "recommend"
-                and isinstance(chunk.content, str)
-                and chunk.content
-            ):
+            node = metadata.get("langgraph_node")
+            content = chunk.content
+
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                text = "".join(
+                    block.get("text", "")
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                )
+            else:
+                text = ""
+
+            if node == "recommend" and text:
                 got_chunk = True
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk.content})}\n\n"
+                yield f"data: {json.dumps({'type': 'chunk', 'content': text})}\n\n"
 
         if not got_chunk:
             state = recommender.get_state(config)

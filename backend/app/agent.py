@@ -1,7 +1,8 @@
 from typing import TypedDict
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_tavily import TavilySearch
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.types import interrupt
@@ -20,6 +21,8 @@ class RecommenderState(TypedDict):
 
 
 _llm = ChatAnthropic(model="claude-haiku-4-5-20251001")  # type: ignore[call-arg]
+_search_tool = TavilySearch(max_results=3)
+_llm_with_tools = _llm.bind_tools([_search_tool])
 
 
 def ask_mood(state: RecommenderState) -> dict:
@@ -94,12 +97,16 @@ def recommend(state: RecommenderState) -> dict:
             "You are a movie and TV series recommender for a couple. "
             "Based on their current mood, preferences, and what they've genuinely enjoyed before, "
             "recommend exactly ONE specific title they haven't seen yet. "
-            "Explain in 2-3 sentences why it matches their current mood, "
-            "referencing specific things from their past reviews when relevant."
-            "Respect a specific structure for your response: "
-            "A h2 markdown header for the title (e.g. ## Prison Break)"
-            "A new line and then a paragraph with the 2-3 sentences."
-            "Skip any intros and outros"
+            "Use the web_search tool (at most 2 searches total) to verify the title is available "
+            "to watch in Romania (Netflix Romania, HBO Max Romania, Disney+ Romania, Amazon Prime Romania, or similar). "
+            "If it is NOT available, search for one alternative. "
+            "Do not narrate your search process — go straight to the formatted recommendation. "
+            "Your entire response must follow this exact structure and nothing else: "
+            "A h2 markdown header for the title (e.g. ## Prison Break). "
+            "A new paragraph with 2-3 sentences explaining why it matches their mood, "
+            "referencing specific things from their past reviews. "
+            "A line with the available platform: ### Available platform: `Netflix`. "
+            "No intro, no outro, no bullet points, no reasoning — only the formatted output above."
         )
     )
 
@@ -110,12 +117,37 @@ def recommend(state: RecommenderState) -> dict:
             f"Genres: {', '.join(state.get('genres', [])) or 'no preference'}\n"
             f"Nostalgic reference: {state.get('nostalgic_title') or 'none'}\n\n"
             f"Their watch history matches:\n{context}\n\n"
-            "Give your recommendation."
+            "Give your recommendation. Remember to search for availability in Romania first."
         )
     )
 
-    response = _llm.invoke([system, human])
-    return {"recommendation": response.content}
+    messages = [system, human]
+
+    while True:
+        response = _llm_with_tools.invoke(messages)
+        messages.append(response)
+
+        if not response.tool_calls:
+            break
+
+        for tool_call in response.tool_calls:
+            tool_result = _search_tool.invoke(tool_call["args"])
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=tool_call["id"],
+                )
+            )
+
+    final_content = response.content
+
+    if isinstance(final_content, list):
+        final_content = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in final_content
+        )
+
+    return {"recommendation": final_content}
 
 
 def route_after_search(state: RecommenderState) -> str:
