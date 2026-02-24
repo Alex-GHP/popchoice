@@ -1,8 +1,10 @@
+import json
 import os
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Security, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langgraph.types import Command
 from pydantic import BaseModel
@@ -102,12 +104,30 @@ def recommend_start() -> StartResponse:
     return StartResponse(thread_id=thread_id, question=question)
 
 
-@app.post("/recommend/reply", response_model=ReplyResponse)
-def recommend_reply(body: ReplyRequest) -> ReplyResponse:
+@app.post("/recommend/reply")
+def recommend_reply(body: ReplyRequest) -> StreamingResponse:
     config = {"configurable": {"thread_id": body.thread_id}}
-    result = recommender.invoke(Command(resume=body.answer), config)
 
-    if "__interrupt__" in result:
-        return ReplyResponse(done=False, question=result["__interrupt__"][0].value)
+    def event_stream():
+        got_question = False
+        for event_type, data in recommender.stream(
+            Command(resume=body.answer),
+            config,
+            stream_mode=["messages", "updates"],
+        ):
+            if event_type == "updates" and "__interrupt__" in data:
+                question = data["__interrupt__"][0].value
+                yield f"data: {json.dumps({'type': 'question', 'question': question})}\n\n"
+                got_question = True
+            elif event_type == "messages":
+                chunk, metadata = data
+                if (
+                    metadata.get("langgraph_node") == "recommend"
+                    and isinstance(chunk.content, str)
+                    and chunk.content
+                ):
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk.content})}\n\n"
+        if not got_question:
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-    return ReplyResponse(done=True, recommendation=result["recommendation"])
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

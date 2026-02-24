@@ -29,6 +29,11 @@ export interface SearchResult {
   genres: string[];
 }
 
+export type SSEEvent =
+  | { type: "chunk"; content: string }
+  | { type: "question"; question: string }
+  | { type: "done" };
+
 export async function searchMedia(query: string): Promise<SearchResult[]> {
   const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) throw new Error("Failed to search media");
@@ -53,15 +58,38 @@ export async function startRecommendation(): Promise<StartResponse> {
   return res.json() as Promise<StartResponse>;
 }
 
-export async function sendReply(
+export async function* sendReply(
   thread_id: string,
   answer: string,
-): Promise<ReplyResponse> {
+): AsyncGenerator<SSEEvent> {
   const res = await fetch("/api/recommend/reply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ thread_id, answer }),
   });
   if (!res.ok) throw new Error("Failed to send reply");
-  return res.json() as Promise<ReplyResponse>;
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("Response body is not readable");
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE events are separated by \n\n
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+
+    for (const part of parts) {
+      const line = part.trim();
+      if (line.startsWith("data: ")) {
+        const raw = line.slice(6).trim();
+        if (raw) yield JSON.parse(raw) as SSEEvent;
+      }
+    }
+  }
 }

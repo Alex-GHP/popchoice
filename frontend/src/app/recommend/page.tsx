@@ -22,8 +22,10 @@ export default function RecommendPage() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [recommendation, setRecommendation] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const idCounter = useRef(0);
+  const streamingRef = useRef("");
 
   function nextId() {
     idCounter.current += 1;
@@ -52,17 +54,26 @@ export default function RecommendPage() {
     setMessages((m) => [...m, { id: nextId(), role: "user", text: answer }]);
     setInput("");
     setLoading(true);
+    streamingRef.current = "";
 
     try {
-      const data = await sendReply(threadId, answer);
-      if (data.done) {
-        setDone(true);
-        setRecommendation(data.recommendation ?? null);
-      } else {
-        setMessages((m) => [
-          ...m,
-          { id: nextId(), role: "agent", text: data.question ?? "" },
-        ]);
+      for await (const event of sendReply(threadId, answer)) {
+        if (event.type === "question") {
+          setMessages((m) => [
+            ...m,
+            { id: nextId(), role: "agent", text: event.question },
+          ]);
+          setLoading(false);
+        } else if (event.type === "chunk") {
+          streamingRef.current += event.content;
+          setStreamingText(streamingRef.current);
+          setLoading(false);
+        } else if (event.type === "done") {
+          setDone(true);
+          setRecommendation(streamingRef.current);
+          setStreamingText("");
+          streamingRef.current = "";
+        }
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -78,11 +89,13 @@ export default function RecommendPage() {
     setLoading(false);
     setDone(false);
     setRecommendation(null);
+    setStreamingText("");
     setError(null);
+    streamingRef.current = "";
     idCounter.current = 0;
   }
 
-  const started = messages.length > 0 || done;
+  const started = messages.length > 0 || done || !!streamingText;
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -139,13 +152,16 @@ export default function RecommendPage() {
               </div>
             )}
 
-            {done && recommendation && (
+            {/* Streaming recommendation — grows token by token */}
+            {(streamingText || (done && recommendation)) && (
               <div className="mt-2 rounded-lg border border-border p-4">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   Recommendation
                 </p>
                 <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown>{recommendation}</ReactMarkdown>
+                  <ReactMarkdown>
+                    {streamingText || recommendation || ""}
+                  </ReactMarkdown>
                 </div>
               </div>
             )}
@@ -163,7 +179,7 @@ export default function RecommendPage() {
           >
             Start over
           </Button>
-        ) : started && !loading ? (
+        ) : streamingText ? null : started && !loading ? (
           <form onSubmit={handleSend} className="mt-4 flex gap-2">
             <Input
               value={input}

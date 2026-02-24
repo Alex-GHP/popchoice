@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 const BACKEND = process.env.API_URL ?? "http://localhost:8000";
 const SECRET = process.env.API_SECRET ?? "";
@@ -13,6 +13,10 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify(body),
   });
-  const data = await res.json();
-  return NextResponse.json(data, { status: res.status });
+  return new Response(res.body, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    },
+  });
 }

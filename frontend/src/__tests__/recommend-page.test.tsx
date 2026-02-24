@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import RecommendPage from "@/app/recommend/page";
-import { sendReply, startRecommendation } from "@/lib/api";
+import { type SSEEvent, sendReply, startRecommendation } from "@/lib/api";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -27,16 +27,24 @@ vi.mock("@/lib/api", () => ({
   sendReply: vi.fn(),
 }));
 
+async function* questionGen(question: string): AsyncGenerator<SSEEvent> {
+  yield { type: "question", question };
+}
+
+async function* recommendationGen(content: string): AsyncGenerator<SSEEvent> {
+  yield { type: "chunk", content };
+  yield { type: "done" };
+}
+
 describe("Recommend page", () => {
   beforeEach(() => {
     vi.mocked(startRecommendation).mockResolvedValue({
       thread_id: "thread-abc",
       question: "What mood are you in tonight?",
     });
-    vi.mocked(sendReply).mockResolvedValue({
-      done: false,
-      question: "Movie or series?",
-    });
+    vi.mocked(sendReply).mockImplementation(() =>
+      questionGen("Movie or series?"),
+    );
   });
 
   it("renders the Start button before conversation begins", () => {
@@ -80,10 +88,9 @@ describe("Recommend page", () => {
   });
 
   it("shows recommendation when the agent is done", async () => {
-    vi.mocked(sendReply).mockResolvedValue({
-      done: true,
-      recommendation: "Watch Parasite — it perfectly matches your mood.",
-    });
+    vi.mocked(sendReply).mockImplementation(() =>
+      recommendationGen("Watch Parasite — it perfectly matches your mood."),
+    );
 
     render(<RecommendPage />);
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
@@ -101,10 +108,9 @@ describe("Recommend page", () => {
   });
 
   it("shows a Start over button after the recommendation", async () => {
-    vi.mocked(sendReply).mockResolvedValue({
-      done: true,
-      recommendation: "Watch Parasite.",
-    });
+    vi.mocked(sendReply).mockImplementation(() =>
+      recommendationGen("Watch Parasite."),
+    );
 
     render(<RecommendPage />);
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
