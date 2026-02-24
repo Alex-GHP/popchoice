@@ -109,25 +109,28 @@ def recommend_reply(body: ReplyRequest) -> StreamingResponse:
     config = {"configurable": {"thread_id": body.thread_id}}
 
     def event_stream():
-        got_question = False
-        for event_type, data in recommender.stream(
+        got_chunk = False
+        for chunk, metadata in recommender.stream(
             Command(resume=body.answer),
             config,
-            stream_mode=["messages", "updates"],
+            stream_mode="messages",
         ):
-            if event_type == "updates" and "__interrupt__" in data:
-                question = data["__interrupt__"][0].value
+            if (
+                metadata.get("langgraph_node") == "recommend"
+                and isinstance(chunk.content, str)
+                and chunk.content
+            ):
+                got_chunk = True
+                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk.content})}\n\n"
+
+        if not got_chunk:
+            state = recommender.get_state(config)
+            if state.tasks and state.tasks[0].interrupts:
+                question = state.tasks[0].interrupts[0].value
                 yield f"data: {json.dumps({'type': 'question', 'question': question})}\n\n"
-                got_question = True
-            elif event_type == "messages":
-                chunk, metadata = data
-                if (
-                    metadata.get("langgraph_node") == "recommend"
-                    and isinstance(chunk.content, str)
-                    and chunk.content
-                ):
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk.content})}\n\n"
-        if not got_question:
+            else:
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        else:
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
