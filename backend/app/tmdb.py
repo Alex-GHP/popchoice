@@ -57,3 +57,14 @@ def search_media(query: str) -> list[dict]:
         )
 
     return results[:10]
+
+
+def get_watch_providers(tmdb_id: int, media_type: str) -> dict:
+    endpoint = "movie" if media_type == "movie" else "tv"
+    with httpx.Client() as client:
+        resp = client.get(
+            f"{_BASE}/{endpoint}/{tmdb_id}/watch/providers",
+            params={"api_key": TMDB_API_KEY},
+        )
+    resp.raise_for_status()
+    return resp.json().get("results", {})

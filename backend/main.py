@@ -23,6 +23,7 @@ INITIAL_STATE = {
     "search_results": [],
     "recommendation": None,
     "asked_nostalgic": False,
+    "availability_info": None,
 }
 
 

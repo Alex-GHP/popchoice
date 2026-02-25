@@ -1,13 +1,36 @@
 from typing import TypedDict
 
 from langchain_anthropic import ChatAnthropic
-from langchain_tavily import TavilySearch
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.types import interrupt
 
 from app.database import search_similar
+from app.tmdb import get_watch_providers, search_media
+
+
+@tool
+def check_streaming_in_romania(title: str) -> str:
+    """Check if a movie or series is currently available for streaming in Romania.
+    Returns the platforms it's available on, or states it's not available."""
+    results = search_media(title)
+    if not results:
+        return f"Could not find '{title}' on TMDB."
+
+    top = results[0]
+    tmdb_id = top["tmdb_id"]
+    media_type = top["type"]
+
+    providers = get_watch_providers(tmdb_id, media_type)
+    flatrate = providers.get("RO", {}).get("flatrate", [])
+
+    if not flatrate:
+        return f"'{top['title']}' is NOT currently available for streaming in Romania."
+
+    platforms = [p["provider_name"] for p in flatrate]
+    return f"'{top['title']}' is available on: {', '.join(platforms)} in Romania."
 
 
 class RecommenderState(TypedDict):
@@ -18,11 +41,11 @@ class RecommenderState(TypedDict):
     search_results: list[dict]
     recommendation: str | None
     asked_nostalgic: bool
+    availability_info: str | None
 
 
 _llm = ChatAnthropic(model="claude-haiku-4-5-20251001")  # type: ignore[call-arg]
-_search_tool = TavilySearch(max_results=3)
-_llm_with_tools = _llm.bind_tools([_search_tool])
+_llm_with_tools = _llm.bind_tools([check_streaming_in_romania])
 
 
 def ask_mood(state: RecommenderState) -> dict:
@@ -76,34 +99,79 @@ def ask_nostalgic(state: RecommenderState) -> dict:
     return {"nostalgic_title": title, "asked_nostalgic": True}
 
 
-def recommend(state: RecommenderState) -> dict:
+def _build_watch_context(state: RecommenderState) -> str:
     results = state.get("search_results", [])
+    if not results:
+        return "No strong matches found in their watch history."
+    lines = []
+    for r in results:
+        line = (
+            f"- {r['title']} ({r['type']}, rated {r.get('user_rating', '?')}/10): "
+            f'Mora said "{r.get("user_review", "")}". '
+            f'GF said "{r.get("gf_review", "")}".'
+        )
+        lines.append(line)
+    return "\n".join(lines)
 
-    if results:
-        context_lines = []
-        for r in results:
-            line = (
-                f"- {r['title']} ({r['type']}, rated {r.get('user_rating', '?')}/10): "
-                f'Mora said "{r.get("user_review", "")}". '
-                f'GF said "{r.get("gf_review", "")}".'
+
+def check_availability(state: RecommenderState) -> dict:
+    """Use the LLM with tools to find a title that is available for streaming."""
+    context = _build_watch_context(state)
+
+    system = SystemMessage(
+        content=(
+            "You are helping a couple find something to watch tonight. "
+            "Use the check_streaming_in_romania tool to verify titles are available. "
+            "If a title is NOT available, pick a different one and check again. "
+            "Keep trying until you find one that IS available (up to 4 checks)."
+        )
+    )
+
+    human = HumanMessage(
+        content=(
+            f"Current mood: {', '.join(state.get('mood', [])) or 'not specified'}\n"
+            f"Wants: {state.get('media_type')}\n"
+            f"Genres: {', '.join(state.get('genres', [])) or 'no preference'}\n"
+            f"Nostalgic reference: {state.get('nostalgic_title') or 'none'}\n\n"
+            f"Their watch history matches:\n{context}\n\n"
+            "Find a title that matches their preferences and verify "
+            "it is available for streaming in Romania."
+        )
+    )
+
+    messages: list = [system, human]
+
+    while True:
+        response = _llm_with_tools.invoke(messages)
+
+        if not response.tool_calls:
+            break
+
+        messages.append(response)
+        for tool_call in response.tool_calls:
+            tool_result = check_streaming_in_romania.invoke(tool_call["args"])
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=tool_call["id"],
+                )
             )
-            context_lines.append(line)
-        context = "\n".join(context_lines)
-    else:
-        context = "No strong matches found in their watch history."
+
+    tool_results = [m.content for m in messages if isinstance(m, ToolMessage)]
+    return {"availability_info": "\n".join(tool_results) if tool_results else ""}
+
+
+def recommend(state: RecommenderState) -> dict:
+    """Generate the formatted recommendation (no tool calls — safe to stream)."""
+    context = _build_watch_context(state)
+    availability = state.get("availability_info") or "No availability data."
 
     system = SystemMessage(
         content=(
             "You are a movie and TV series recommender for a couple. "
-            "Based on their current mood, preferences, and what they've genuinely enjoyed before, "
-            "recommend exactly ONE specific title they haven't seen yet. "
-            "Use the web_search tool (at most 2 searches total) to verify the title is available "
-            "to watch in Romania (Netflix Romania, HBO Max Romania, Disney+ Romania, Amazon Prime Romania, or similar). "
-            "If it is NOT available, search for one alternative. "
-            "CRITICAL FORMATTING RULE: Your FINAL response (after all tool calls) must start IMMEDIATELY with '## ' — "
-            "the markdown h2 header for the title. No text is allowed before it. No preamble, no narration, "
-            "no 'Let me search', no thinking out loud. The very first characters of your response MUST be '## '. "
-            "Your entire response must follow this exact structure and nothing else:\n\n"
+            "Based on their mood, preferences, watch history, and the verified "
+            "streaming availability below, recommend exactly ONE title.\n\n"
+            "Your response must follow this EXACT format — start IMMEDIATELY with '## ':\n\n"
             "## {Title}\n\n"
             "{2-3 sentences explaining why it matches their mood, referencing their past reviews.}\n\n"
             "### Available on: `{Platform}`\n\n"
@@ -123,29 +191,12 @@ def recommend(state: RecommenderState) -> dict:
             f"Genres: {', '.join(state.get('genres', [])) or 'no preference'}\n"
             f"Nostalgic reference: {state.get('nostalgic_title') or 'none'}\n\n"
             f"Their watch history matches:\n{context}\n\n"
-            "Give your recommendation. Remember to search for availability in Romania first. "
-            "Your final response MUST start with '## ' — no preamble or narration before the title."
+            f"Verified streaming availability:\n{availability}\n\n"
+            "Write the recommendation. Start IMMEDIATELY with '## '."
         )
     )
 
-    messages = [system, human]
-
-    while True:
-        response = _llm_with_tools.invoke(messages)
-        messages.append(response)
-
-        if not response.tool_calls:
-            break
-
-        for tool_call in response.tool_calls:
-            tool_result = _search_tool.invoke(tool_call["args"])
-            messages.append(
-                ToolMessage(
-                    content=str(tool_result),
-                    tool_call_id=tool_call["id"],
-                )
-            )
-
+    response = _llm.invoke([system, human])
     final_content = response.content
 
     if isinstance(final_content, list):
@@ -153,6 +204,10 @@ def recommend(state: RecommenderState) -> dict:
             block.get("text", "") if isinstance(block, dict) else str(block)
             for block in final_content
         )
+
+    marker = final_content.find("## ")
+    if marker > 0:
+        final_content = final_content[marker:]
 
     return {"recommendation": final_content}
 
@@ -174,6 +229,7 @@ def build_graph():
     graph.add_node("ask_genres", ask_genres)
     graph.add_node("search_db", search_db)
     graph.add_node("ask_nostalgic", ask_nostalgic)
+    graph.add_node("check_availability", check_availability)
     graph.add_node("recommend", recommend)
 
     graph.set_entry_point("ask_mood")
@@ -181,13 +237,14 @@ def build_graph():
     graph.add_edge("ask_type", "ask_genres")
     graph.add_edge("ask_genres", "search_db")
     graph.add_edge("ask_nostalgic", "search_db")
+    graph.add_edge("check_availability", "recommend")
     graph.add_edge("recommend", END)
 
     graph.add_conditional_edges(
         "search_db",
         route_after_search,
         {
-            "recommend": "recommend",
+            "recommend": "check_availability",
             "ask_nostalgic": "ask_nostalgic",
         },
     )

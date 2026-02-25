@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import app.tmdb as tmdb_module
-from app.tmdb import search_media
+from app.tmdb import get_watch_providers, search_media
 
 MOVIE_GENRES_RESP = {
     "genres": [{"id": 35, "name": "Comedy"}, {"id": 28, "name": "Action"}]
@@ -199,3 +199,44 @@ class TestSearchMedia:
             results = search_media("xyzzy")
 
         assert results == []
+
+
+WATCH_PROVIDERS_RESP = {
+    "results": {
+        "RO": {
+            "flatrate": [
+                {"provider_id": 8, "provider_name": "Netflix"},
+                {"provider_id": 119, "provider_name": "Amazon Prime Video"},
+            ]
+        }
+    }
+}
+
+
+class TestGetWatchProviders:
+    def test_returns_providers_by_country(self):
+        with _patch_client(_make_http_response(WATCH_PROVIDERS_RESP)):
+            result = get_watch_providers(8191, "movie")
+
+        assert "RO" in result
+        assert result["RO"]["flatrate"][0]["provider_name"] == "Netflix"
+
+    def test_uses_movie_endpoint_for_movie(self):
+        with _patch_client(_make_http_response(WATCH_PROVIDERS_RESP)) as MockClient:
+            get_watch_providers(8191, "movie")
+
+        url = MockClient.return_value.__enter__.return_value.get.call_args[0][0]
+        assert "/movie/" in url
+
+    def test_uses_tv_endpoint_for_series(self):
+        with _patch_client(_make_http_response(WATCH_PROVIDERS_RESP)) as MockClient:
+            get_watch_providers(1001, "series")
+
+        url = MockClient.return_value.__enter__.return_value.get.call_args[0][0]
+        assert "/tv/" in url
+
+    def test_returns_empty_dict_when_no_results(self):
+        with _patch_client(_make_http_response({"results": {}})):
+            result = get_watch_providers(9999, "movie")
+
+        assert result == {}
